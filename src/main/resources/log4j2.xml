@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30">
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} [%X{correlationId}] - %msg%n"/>
+        </Console>
+
+        <!-- Delivery log: email/SMS/push status -->
+        <RollingFile name="DeliveryFile" fileName="logs/notification-delivery.log"
+                     filePattern="logs/notification-delivery-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="%d [%t] %-5level %logger{36} [%X{correlationId}] [%X{userId}] - %msg%n"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="50MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="30"/>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <!-- Notification service code -->
+        <Logger name="com.its.notification" level="debug" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <!-- Delivery events: INFO -->
+        <Logger name="com.its.notification.delivery" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="DeliveryFile"/>
+        </Logger>
+
+        <!-- Retry/failure events: WARN + ERROR -->
+        <Logger name="com.its.notification.retry" level="warn" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="DeliveryFile"/>
+        </Logger>
+
+        <Logger name="org.springframework" level="info"/>
+        <Logger name="org.hibernate" level="warn"/>
+
+        <Root level="info">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="DeliveryFile"/>
+        </Root>
+    </Loggers>
+
+</Configuration>
