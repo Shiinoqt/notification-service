@@ -3,6 +3,7 @@ package com.its.notificationservice.service;
 import com.its.notificationservice.dto.PaymentResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -28,10 +29,20 @@ public class SmtpEmailService implements EmailService {
             throw new IllegalArgumentException("Recipient email is missing");
         }
 
-        log.info("Creating order mail");
+        String recipient = paymentResponse.getEmail().trim();
+
+        log.info("Creating order mail for {}", recipient);
+
+        SimpleMailMessage message = getSimpleMailMessage(paymentResponse, recipient);
+
+        mailSender.send(message);
+        log.info("Order mail sent to {}", recipient);
+    }
+
+    private @NonNull SimpleMailMessage getSimpleMailMessage(PaymentResponse paymentResponse, String recipient) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromEmail);
-        message.setTo(paymentResponse.getEmail().trim());
+        message.setTo(recipient);
         message.setSubject("Payment Successful");
         message.setText(
                 "Hello,\n\n" +
@@ -42,8 +53,6 @@ public class SmtpEmailService implements EmailService {
                         "Status: " + paymentResponse.getStatus() + "\n\n" +
                         "Thank you for your purchase."
         );
-
-        mailSender.send(message);
-        log.info("Order mail sent");
+        return message;
     }
 }
