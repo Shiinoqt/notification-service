@@ -86,8 +86,18 @@
             <artifactId>jasperreports</artifactId>
             <version>6.21.5</version>
         </dependency>
-    </dependencies>
 
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.20.132</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>auth</artifactId>
+            <version>2.20.132</version>
+        </dependency>
+    </dependencies>
     <build>
         <plugins>
             <plugin>

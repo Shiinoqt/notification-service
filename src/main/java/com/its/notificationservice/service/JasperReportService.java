@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.sf.jasperreports.engine.*;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,20 +29,20 @@ public class JasperReportService {
         log.info("Starting receipt PDF generation: orderId={}, transactionId={}, reportPath={}",
                 orderId, transactionId, REPORT_PATH);
 
-        InputStream reportStream = getClass().getResourceAsStream(REPORT_PATH);
-        if (reportStream == null) {
-            log.error("Report template not found: orderId={}, transactionId={}, reportPath={}",
-                    orderId, transactionId, REPORT_PATH);
-            throw new IllegalStateException("Report template not found: " + REPORT_PATH);
-        }
+        try (InputStream reportStream = getClass().getResourceAsStream(REPORT_PATH);
+             InputStream logoStream = getClass().getResourceAsStream(LOGO_PATH)) {
 
-        InputStream logoStream = getClass().getResourceAsStream(LOGO_PATH);
-        if (logoStream == null) {
-            log.error("Logo file not found: {}", LOGO_PATH);
-            throw new IllegalStateException("Logo file not found: " + LOGO_PATH);
-        }
+            if (reportStream == null) {
+                log.error("Report template not found: orderId={}, transactionId={}, reportPath={}",
+                        orderId, transactionId, REPORT_PATH);
+                throw new IllegalStateException("Report template not found: " + REPORT_PATH);
+            }
 
-        try {
+            if (logoStream == null) {
+                log.error("Logo file not found: {}", LOGO_PATH);
+                throw new IllegalStateException("Logo file not found: " + LOGO_PATH);
+            }
+
             JasperReport jasperReport = JasperCompileManager.compileReport(reportStream);
 
             Map<String, Object> params = new HashMap<>();
@@ -60,17 +61,21 @@ public class JasperReportService {
                     orderId, transactionId, pdf.length);
 
             return pdf;
+
         } catch (JRException e) {
             Throwable root = e;
             while (root.getCause() != null) {
                 root = root.getCause();
             }
-
             log.error(
                     "Jasper report generation failed: orderId={}, transactionId={}, reportPath={}, error={}, rootError={}",
                     orderId, transactionId, REPORT_PATH, e.getMessage(), root.getMessage(), e
             );
             throw e;
+        } catch (IOException e) {
+            log.error("IO error reading report resource streams: orderId={}, transactionId={}, error={}",
+                    orderId, transactionId, e.getMessage(), e);
+            throw new RuntimeException("Failed to read report resources", e);
         }
     }
 }
