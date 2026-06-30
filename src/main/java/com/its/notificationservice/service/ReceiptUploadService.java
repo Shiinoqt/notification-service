@@ -1,52 +1,26 @@
 package com.its.notificationservice.service;
 
+import com.its.notificationservice.config.RabbitMQConfig;
+import com.its.notificationservice.dto.PaymentReceiptCreatedEvent;
 import com.its.notificationservice.dto.PaymentResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jasperreports.engine.JRException;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class ReceiptUploadService {
-//    private final JasperReportService jasperReportService;
+
     private final S3Service s3Service;
+    private final RabbitTemplate rabbitTemplate;
 
-//    /**
-//     * Generates the receipt PDF and uploads it to S3.
-//     * Use this when no PDF has been produced yet (e.g. standalone upload flows).
-//     */
-//    public CompletableFuture<PutObjectResponse> generateAndUploadReceipt(String userId,
-//                                                                         PaymentResponse paymentResponse) {
-//        try {
-//            byte[] pdfBytes = jasperReportService.generatePaymentReceiptPdf(paymentResponse);
-//
-//            return s3Service.uploadReceiptPdf(
-//                    userId,
-//                    String.valueOf(paymentResponse.getOrderId()),
-//                    String.valueOf(paymentResponse.getTransactionId()),
-//                    pdfBytes
-//            );
-//        } catch (JRException e) {
-//            log.error("Failed to generate receipt PDF for upload: userId={}, orderId={}, error={}",
-//                    userId, paymentResponse != null ? paymentResponse.getOrderId() : "unknown", e.getMessage(), e);
-//            return CompletableFuture.failedFuture(e);
-//        } catch (Exception e) {
-//            log.error("Unexpected error generating or uploading receipt: userId={}, orderId={}, error={}",
-//                    userId, paymentResponse != null ? paymentResponse.getOrderId() : "unknown", e.getMessage(), e);
-//            return CompletableFuture.failedFuture(e);
-//        }
-//    }
-
-    /**
-     * Uploads a pre-generated PDF receipt to S3 without regenerating it.
-     * Use this when the PDF has already been produced for another purpose
-     * (e.g. as an email attachment) to avoid a redundant JasperReports compile+fill cycle.
-     */
     public CompletableFuture<PutObjectResponse> uploadReceipt(String userId,
                                                               PaymentResponse paymentResponse,
                                                               byte[] pdfBytes) {
@@ -61,11 +35,41 @@ public class ReceiptUploadService {
                     new IllegalArgumentException("pdfBytes cannot be null or empty"));
         }
 
-        return s3Service.uploadReceiptPdf(
-                userId,
-                String.valueOf(paymentResponse.getOrderId()),
-                String.valueOf(paymentResponse.getTransactionId()),
-                pdfBytes
-        );
+        String orderId      = String.valueOf(paymentResponse.getOrderId());
+        String transactionId = String.valueOf(paymentResponse.getTransactionId());
+
+        // compute key now, before the async boundary
+        String storageKey     = s3Service.buildReceiptKey(userId, orderId, transactionId);
+        String receiptFileName = "receipt-" + orderId + "-" + transactionId + ".pdf";
+
+        return s3Service.uploadReceiptPdf(userId, orderId, transactionId, pdfBytes)
+                .whenComplete((response, ex) -> {
+                    if (ex != null) {
+                        log.error("S3 upload failed: userId={}, orderId={}, error={}",
+                                userId, orderId, ex.getMessage(), ex);
+                        return;
+                    }
+                    log.info("S3 upload successful, publishing receipt event: orderId={}, key={}",
+                            orderId, storageKey);
+                    publishReceiptEvent(paymentResponse.getOrderId(), receiptFileName);
+                });
+    }
+
+    private void publishReceiptEvent(Object rawOrderId, String receiptFileName) {
+        try {
+            UUID orderId = rawOrderId instanceof UUID uuid
+                    ? uuid
+                    : UUID.fromString(rawOrderId.toString());
+
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.PAYMENT_RECEIPT_EXCHANGE,
+                    RabbitMQConfig.PAYMENT_RECEIPT_ROUTING_KEY,
+                    new PaymentReceiptCreatedEvent(orderId, receiptFileName)
+            );
+            log.info("PaymentReceiptCreatedEvent published: orderId={}", orderId);
+        } catch (Exception ex) {
+            log.error("Failed to publish receipt event: orderId={}, error={}",
+                    rawOrderId, ex.getMessage(), ex);
+        }
     }
 }

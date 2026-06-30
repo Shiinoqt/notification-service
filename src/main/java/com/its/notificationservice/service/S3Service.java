@@ -52,7 +52,7 @@ public class S3Service {
         return s3Client.putObject(request, AsyncRequestBody.fromBytes(pdfBytes));
     }
 
-    private String buildReceiptKey(String userId, String orderId, String transactionId) {
+    public String buildReceiptKey(String userId, String orderId, String transactionId) {
         return String.format("p.rebong/%s/receipt-%s-%s.pdf", userId, orderId, transactionId);
     }
 }

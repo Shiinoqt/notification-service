@@ -17,4 +17,5 @@ public class PaymentResponse {
     private String email;
     private BigDecimal amount;
     private StatusEnum status;
+    private String receipt;
 }
